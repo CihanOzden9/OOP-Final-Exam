@@ -1,0 +1,21 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio / VS Code
+.vscode/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Temporary files
+*.log
+*.tmp
+thumbs.db
