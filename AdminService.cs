@@ -52,23 +52,76 @@ public class AdminService
 
     public void DeleteUser(int userId)
     {
-        // Prevent deleting self or critical logic could be added here
-        if (userId == Session.CurrentUser?.Id)
+        // Kendi Kendini Silme Engeli
+        if (Session.CurrentUser != null && userId == Session.CurrentUser.Id)
         {
-            Console.WriteLine("Hata: Kendinizi silemezsiniz.");
+            Console.WriteLine("Hata: Kendi hesabınızı silemezsiniz! İşlem durduruldu.");
             return;
         }
 
         using (var connection = _dbHelper.GetConnection())
         {
             connection.Open();
-            var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM Users WHERE Id = $id";
-            command.Parameters.AddWithValue("$id", userId);
-            
-            int rows = command.ExecuteNonQuery();
-            if (rows > 0) Console.WriteLine("Kullanıcı silindi.");
-            else Console.WriteLine("Kullanıcı bulunamadı.");
+
+            // SQLite Foreign Key Constraint'i aktif et
+            using (var pragmaCmd = connection.CreateCommand())
+            {
+                pragmaCmd.CommandText = "PRAGMA foreign_keys = ON;";
+                pragmaCmd.ExecuteNonQuery();
+            }
+
+            using (var transaction = connection.BeginTransaction())
+            {
+                try
+                {
+                    // 1. Bu kullanıcının yaptığı kiralamaları sil (Renter olarak)
+                    var deleteRentalsCmd = connection.CreateCommand();
+                    deleteRentalsCmd.Transaction = transaction;
+                    deleteRentalsCmd.CommandText = "DELETE FROM Rentals WHERE RenterId = $userId";
+                    deleteRentalsCmd.Parameters.AddWithValue("$userId", userId);
+                    deleteRentalsCmd.ExecuteNonQuery();
+
+                    // 2. Bu kullanıcının sahip olduğu ürünlere ait kiralamaları sil 
+                    // (Ürün silinmeden önce o ürüne ait kiralamalar silinmeli)
+                    var deleteProductRentalsCmd = connection.CreateCommand();
+                    deleteProductRentalsCmd.Transaction = transaction;
+                    deleteProductRentalsCmd.CommandText = "DELETE FROM Rentals WHERE ProductId IN (SELECT Id FROM Products WHERE OwnerId = $userId)";
+                    deleteProductRentalsCmd.Parameters.AddWithValue("$userId", userId);
+                    deleteProductRentalsCmd.ExecuteNonQuery();
+
+                    // 3. Kullanıcının ürünlerini sil (Owner olarak)
+                    var deleteProductsCmd = connection.CreateCommand();
+                    deleteProductsCmd.Transaction = transaction;
+                    deleteProductsCmd.CommandText = "DELETE FROM Products WHERE OwnerId = $userId";
+                    deleteProductsCmd.Parameters.AddWithValue("$userId", userId);
+                    deleteProductsCmd.ExecuteNonQuery();
+
+                    // 4. Kullanıcıyı sil
+                    var deleteUserCmd = connection.CreateCommand();
+                    deleteUserCmd.Transaction = transaction;
+                    deleteUserCmd.CommandText = "DELETE FROM Users WHERE Id = $userId";
+                    deleteUserCmd.Parameters.AddWithValue("$userId", userId);
+                    
+                    int rows = deleteUserCmd.ExecuteNonQuery();
+
+                    if (rows > 0)
+                    {
+                        transaction.Commit();
+                        Console.WriteLine("Kullanıcı ve ilişkili tüm veriler (Ürünler, Kiralamalar) başarıyla silindi.");
+                    }
+                    else
+                    {
+                        // Kullanıcı bulunamadıysa yapılan yan işlemler geri alınsın
+                        transaction.Rollback();
+                        Console.WriteLine("Hata: Silinecek kullanıcı bulunamadı.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    Console.WriteLine($"Hata: Kullanıcı silinemedi. Detay: {ex.Message}");
+                }
+            }
         }
     }
 

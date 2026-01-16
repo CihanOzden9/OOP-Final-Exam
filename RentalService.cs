@@ -26,7 +26,6 @@ public class RentalService
                     var command = connection.CreateCommand();
                     command.Transaction = transaction;
 
-                    // 1. Check if product exists and is not rented
                     command.CommandText = "SELECT IsRented FROM Products WHERE Id = $checkId";
                     command.Parameters.AddWithValue("$checkId", productId);
                     var isRentedObj = command.ExecuteScalar();
@@ -41,7 +40,6 @@ public class RentalService
                         return;
                     }
 
-                    // 2. Insert Rental
                     command.CommandText = @"
                         INSERT INTO Rentals (ProductId, RenterId, Hours)
                         VALUES ($productId, $renterId, $hours);
@@ -52,7 +50,6 @@ public class RentalService
                     command.Parameters.AddWithValue("$hours", hours);
                     command.ExecuteNonQuery();
 
-                    // 3. Update Product to IsRented = 1
                     command.CommandText = @"
                         UPDATE Products SET IsRented = 1 WHERE Id = $prodId;
                     ";

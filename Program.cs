@@ -45,7 +45,6 @@ class Program
         }
         catch (Exception ex)
         {
-             // Critical database init error or similar
              Console.WriteLine($"KRİTİK HATA: {ex.Message}");
         }
     }
